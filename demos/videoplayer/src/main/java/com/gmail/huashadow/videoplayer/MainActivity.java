@@ -9,6 +9,8 @@ import android.util.Log;
 import android.util.Pair;
 import android.view.View;
 import android.widget.Button;
+import android.widget.SeekBar;
+import android.widget.TextView;
 
 import com.google.vr.sdk.widgets.video.VrVideoEventListener;
 import com.google.vr.sdk.widgets.video.VrVideoView;
@@ -20,7 +22,11 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = MainActivity.class.getSimpleName();
     private static final int REQUEST_CODE_CHOOSE_LOCAL_VIDEO = 1;
     private static final String STATE_PROGRESS_TIME = "STATE_PROGRESS_TIME";
+    private static final String STATE_VIDEO_DURATION = "STATE_VIDEO_DURATION";
 
+    private TextView mTvCurTime;
+    private TextView mTvDuration;
+    private SeekBar mSeekBar;
     private VrVideoView mVrVideoView;
     private VideoLoadTask mVideoLoadTask;
     private VrVideoView.Options mOptions = new VrVideoView.Options();
@@ -45,6 +51,10 @@ public class MainActivity extends AppCompatActivity {
         mOptions.inputType = VrVideoView.Options.TYPE_MONO;
         mVrVideoView = (VrVideoView) findViewById(R.id.vr_video_view);
         mVrVideoView.setEventListener(new MyVrVideoEventListener());
+        mSeekBar = (SeekBar) findViewById(R.id.seek_bar);
+        mSeekBar.setOnSeekBarChangeListener(new SeekBarListener());
+        mTvCurTime = (TextView) findViewById(R.id.tv_curTime);
+        mTvDuration = (TextView) findViewById(R.id.tv_duration);
     }
 
     private void chooseLocalVideo() {
@@ -103,6 +113,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onSaveInstanceState(Bundle savedInstanceState) {
         savedInstanceState.putLong(STATE_PROGRESS_TIME, mVrVideoView.getCurrentPosition());
 //        savedInstanceState.putBoolean(STATE_IS_PAUSED, isPaused);
+        savedInstanceState.putLong(STATE_VIDEO_DURATION, mVrVideoView.getDuration());
         super.onSaveInstanceState(savedInstanceState);
     }
 
@@ -111,6 +122,69 @@ public class MainActivity extends AppCompatActivity {
         super.onRestoreInstanceState(savedInstanceState);
         long progressTime = savedInstanceState.getLong(STATE_PROGRESS_TIME);
         mVrVideoView.seekTo(progressTime);
+        mSeekBar.setMax((int) savedInstanceState.getLong(STATE_VIDEO_DURATION));
+        mSeekBar.setProgress((int) progressTime);
+    }
+
+    private void updateProgressText() {
+        long curPosition = mVrVideoView.getCurrentPosition();
+        long duration = mVrVideoView.getDuration();
+        mTvCurTime.setText(secToTime(curPosition/1000));
+        mTvDuration.setText(secToTime(duration/1000));
+    }
+
+    private String secToTime(long time) {
+        String timeStr;
+        long hour;
+        long minute;
+        long second;
+        if (time <= 0)
+            return "00:00";
+        else {
+            minute = time / 60;
+            if (minute < 60) {
+                second = time % 60;
+                timeStr = unitFormat(minute) + ":" + unitFormat(second);
+            } else {
+                hour = minute / 60;
+                if (hour > 99)
+                    return "99:59:59";
+                minute = minute % 60;
+                second = time - hour * 3600 - minute * 60;
+                timeStr = unitFormat(hour) + ":" + unitFormat(minute) + ":" + unitFormat(second);
+            }
+        }
+        return timeStr;
+    }
+
+    private String unitFormat(long i) {
+        String retStr;
+        if (i >= 0 && i < 10)
+            retStr = "0" + Long.toString(i);
+        else
+            retStr = "" + i;
+        return retStr;
+    }
+
+    private class SeekBarListener implements SeekBar.OnSeekBarChangeListener {
+
+        @Override
+        public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            if (fromUser) {
+                mVrVideoView.seekTo(progress);
+            }
+            updateProgressText();
+        }
+
+        @Override
+        public void onStartTrackingTouch(SeekBar seekBar) {
+
+        }
+
+        @Override
+        public void onStopTrackingTouch(SeekBar seekBar) {
+
+        }
     }
 
     private class VideoLoadTask extends AsyncTask<Pair<Uri, VrVideoView.Options>, Void, Boolean> {
@@ -137,6 +211,7 @@ public class MainActivity extends AppCompatActivity {
     private class MyVrVideoEventListener extends VrVideoEventListener {
         public void onLoadSuccess() {
             mHasLoadedVideo = true;
+            mSeekBar.setMax((int) mVrVideoView.getDuration());
             Log.v(TAG, "Video has been loaded successfully.");
         }
 
@@ -153,10 +228,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         public void onCompletion() {
+            mVrVideoView.seekTo(0);
             Log.v(TAG, "video onCompletion");
         }
 
         public void onNewFrame() {
+            mSeekBar.setProgress((int) mVrVideoView.getCurrentPosition());
             Log.v(TAG, "video onNewFrame");
         }
     }
